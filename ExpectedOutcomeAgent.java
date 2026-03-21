@@ -81,6 +81,43 @@ public class ExpectedOutcomeAgent
     //     return fin;
     // }
 
+
+    public Color getWildColor(Hand h) {
+        List<Card> cur_hand = new ArrayList<>();
+        cur_hand = h.getCards();
+        int red = 0;
+        int yellow = 0;
+        int blue = 0;
+        int green = 0;
+        for(Card c : cur_hand){
+            if(c.color() == Color.RED){
+                red += 1;
+            }
+            if(c.color() == Color.YELLOW){
+                yellow += 1;
+            }
+            if(c.color() == Color.BLUE){
+                blue += 1;
+            }
+            if(c.color() == Color.GREEN){
+                green += 1;
+            }
+        }
+
+        if (red >= yellow && red >= blue && red >= green){
+            return Color.RED;
+        }
+        else if (yellow >= red && yellow >= blue && yellow >= green){
+            return Color.YELLOW;
+        }
+        else if (blue >= yellow && blue >= red && blue >= green){
+            return Color.BLUE;
+        }
+        else {
+            return Color.GREEN;
+        }
+    }
+
     public Boolean explore(Node node){
         System.out.println("in Explore");
         GameView game = node.getGameView();
@@ -134,37 +171,9 @@ public class ExpectedOutcomeAgent
                     System.out.println("Explore: legalmoves, iswild");
                     List<Card> cur_hand = new ArrayList<>();
                     cur_hand = h.getCards();
-                    int red = 0;
-                    int yellow = 0;
-                    int blue = 0;
-                    int green = 0;
-                    for(Card c : cur_hand){
-                        if(c.color() == Color.RED){
-                            red += 1;
-                        }
-                        if(c.color() == Color.YELLOW){
-                            yellow += 1;
-                        }
-                        if(c.color() == Color.BLUE){
-                            blue += 1;
-                        }
-                        if(c.color() == Color.GREEN){
-                            green += 1;
-                        }
-                    }
+                    
+                    move = Move.createMove(this, Node.NoLegalMovesIdxDefaults.DrawSingleCardIdxs.PLAY_CARD_MOVE_IDX, getWildColor(h));
 
-                    if (red >= yellow && red >= blue && red >= green){
-                        move = Move.createMove(this, Node.NoLegalMovesIdxDefaults.DrawSingleCardIdxs.PLAY_CARD_MOVE_IDX, Color.RED);
-                    }
-                    if (yellow >= red && yellow >= blue && yellow >= green){
-                        move = Move.createMove(this, Node.NoLegalMovesIdxDefaults.DrawSingleCardIdxs.PLAY_CARD_MOVE_IDX, Color.YELLOW);
-                    }
-                    if (blue >= yellow && blue >= red && blue >= green){
-                        move = Move.createMove(this, Node.NoLegalMovesIdxDefaults.DrawSingleCardIdxs.PLAY_CARD_MOVE_IDX, Color.BLUE);
-                    }
-                    if (green >= yellow && green >= blue && green >= red){
-                        move = Move.createMove(this, Node.NoLegalMovesIdxDefaults.DrawSingleCardIdxs.PLAY_CARD_MOVE_IDX, Color.GREEN);
-                    }
                     Node child = node.getChild(move);
                     if (explore(child)){
                         return true;
@@ -204,37 +213,7 @@ public class ExpectedOutcomeAgent
                     System.out.println("Explore: legalmoves, iswild");
                     List<Card> cur_hand = new ArrayList<>();
                     cur_hand = h.getCards();
-                    int red = 0;
-                    int yellow = 0;
-                    int blue = 0;
-                    int green = 0;
-                    for(Card c : cur_hand){
-                        if(c.color() == Color.RED){
-                            red += 1;
-                        }
-                        if(c.color() == Color.YELLOW){
-                            yellow += 1;
-                        }
-                        if(c.color() == Color.BLUE){
-                            blue += 1;
-                        }
-                        if(c.color() == Color.GREEN){
-                            green += 1;
-                        }
-                    }
-                    Move move = null;
-                    if (red >= yellow && red >= blue && red >= green){
-                        move = Move.createMove(this, randomindex, Color.RED);
-                    }
-                    if (yellow >= red && yellow >= blue && yellow >= green){
-                        move = Move.createMove(this, randomindex, Color.YELLOW);
-                    }
-                    if (blue >= yellow && blue >= red && blue >= green){
-                        move = Move.createMove(this, randomindex, Color.BLUE);
-                    }
-                    if (green >= yellow && green >= blue && green >= red){
-                        move = Move.createMove(this, randomindex, Color.GREEN);
-                    }
+                    Move move = Move.createMove(this, Node.NoLegalMovesIdxDefaults.DrawSingleCardIdxs.PLAY_CARD_MOVE_IDX, getWildColor(h));
                     Node child = node.getChild(move);
                     if (explore(child)){
                         return true;
@@ -289,36 +268,7 @@ public class ExpectedOutcomeAgent
                 if(iswild){
                     List<Card> cur_hand = new ArrayList<>();
                     cur_hand = h.getCards();
-                    int red = 0;
-                    int yellow = 0;
-                    int blue = 0;
-                    int green = 0;
-                    for(Card c : cur_hand){
-                        if(c.color() == Color.RED){
-                            red += 1;
-                        }
-                        if(c.color() == Color.YELLOW){
-                            yellow += 1;
-                        }
-                        if(c.color() == Color.BLUE){
-                            blue += 1;
-                        }
-                        if(c.color() == Color.GREEN){
-                            green += 1;
-                        }
-                    }
-                    if (red >= yellow && red >= blue && red >= green){
-                        move = Move.createMove(this, Node.NoLegalMovesIdxDefaults.DrawSingleCardIdxs.PLAY_CARD_MOVE_IDX, Color.RED);         
-                    }
-                    if (yellow >= red && yellow >= blue && yellow >= green){
-                        move = Move.createMove(this, Node.NoLegalMovesIdxDefaults.DrawSingleCardIdxs.PLAY_CARD_MOVE_IDX, Color.YELLOW);           
-                    }
-                    if (blue >= yellow && blue >= red && blue >= green){
-                        move = Move.createMove(this, Node.NoLegalMovesIdxDefaults.DrawSingleCardIdxs.PLAY_CARD_MOVE_IDX, Color.BLUE);               
-                    }
-                    if (green >= yellow && green >= blue && green >= red){
-                        move = Move.createMove(this, Node.NoLegalMovesIdxDefaults.DrawSingleCardIdxs.PLAY_CARD_MOVE_IDX, Color.GREEN);
-                    }
+                    move = Move.createMove(this, Node.NoLegalMovesIdxDefaults.DrawSingleCardIdxs.PLAY_CARD_MOVE_IDX, getWildColor(h));
                 }
                 else{
                     move = Move.createMove(this, Node.NoLegalMovesIdxDefaults.DrawSingleCardIdxs.PLAY_CARD_MOVE_IDX);
@@ -343,36 +293,7 @@ public class ExpectedOutcomeAgent
             if(iswild){
                 List<Card> cur_hand = new ArrayList<>();
                 cur_hand = h.getCards();
-                int red = 0;
-                int yellow = 0;
-                int blue = 0;
-                int green = 0;
-                for(Card c : cur_hand){
-                    if(c.color() == Color.RED){
-                        red += 1;
-                    }
-                    if(c.color() == Color.YELLOW){
-                        yellow += 1;
-                    }
-                    if(c.color() == Color.BLUE){
-                        blue += 1;
-                    }
-                    if(c.color() == Color.GREEN){
-                        green += 1;
-                    }
-                }
-                if (red >= yellow && red >= blue && red >= green){
-                    move = Move.createMove(this, randomidx, Color.RED);         
-                }
-                if (yellow >= red && yellow >= blue && yellow >= green){
-                    move = Move.createMove(this, randomidx, Color.YELLOW);           
-                }
-                if (blue >= yellow && blue >= red && blue >= green){
-                    move = Move.createMove(this, randomidx, Color.BLUE);               
-                }
-                if (green >= yellow && green >= blue && green >= red){
-                    move = Move.createMove(this, randomidx, Color.GREEN);
-                }
+                move = Move.createMove(this, Node.NoLegalMovesIdxDefaults.DrawSingleCardIdxs.PLAY_CARD_MOVE_IDX, getWildColor(h));
             }
             else{
                 move = Move.createMove(this, randomidx);
@@ -435,40 +356,7 @@ public class ExpectedOutcomeAgent
                 if(iswild){
                     List<Card> cur_hand = new ArrayList<>();
                     cur_hand = h.getCards();
-                    int red = 0;
-                    int yellow = 0;
-                    int blue = 0;
-                    int green = 0;
-                    for(Card c : cur_hand){
-                        if(c.color() == Color.RED){
-                            red += 1;
-                        }
-                        if(c.color() == Color.YELLOW){
-                            yellow += 1;
-                        }
-                        if(c.color() == Color.BLUE){
-                            blue += 1;
-                        }
-                        if(c.color() == Color.GREEN){
-                            green += 1;
-                        }
-                    }
-                    if (red >= yellow && red >= blue && red >= green){
-                        move = Move.createMove(agent, Node.NoLegalMovesIdxDefaults.DrawSingleCardIdxs.PLAY_CARD_MOVE_IDX, Color.RED);
-                        return move;
-                    }
-                    if (yellow >= red && yellow >= blue && yellow >= green){
-                        move = Move.createMove(agent, Node.NoLegalMovesIdxDefaults.DrawSingleCardIdxs.PLAY_CARD_MOVE_IDX, Color.YELLOW);
-                        return move;
-                    }
-                    if (blue >= yellow && blue >= red && blue >= green){
-                        move = Move.createMove(agent, Node.NoLegalMovesIdxDefaults.DrawSingleCardIdxs.PLAY_CARD_MOVE_IDX, Color.BLUE);
-                        return move;
-                    }
-                    if (green >= yellow && green >= blue && green >= red){
-                        move = Move.createMove(agent, Node.NoLegalMovesIdxDefaults.DrawSingleCardIdxs.PLAY_CARD_MOVE_IDX, Color.GREEN);
-                        return move;
-                    }
+                    move = Move.createMove(this, Node.NoLegalMovesIdxDefaults.DrawSingleCardIdxs.PLAY_CARD_MOVE_IDX, getWildColor(h));
                 }else{  
                     move = Move.createMove(agent, Node.NoLegalMovesIdxDefaults.DrawSingleCardIdxs.PLAY_CARD_MOVE_IDX);
                     return move;
@@ -503,40 +391,7 @@ public class ExpectedOutcomeAgent
                 //If wild, determine the largest number of colors in your hand and set the wild to that color
                 List<Card> cur_hand = new ArrayList<>();
                 cur_hand = h.getCards();
-                int red = 0;
-                int yellow = 0;
-                int blue = 0;
-                int green = 0;
-                for(Card c : cur_hand){
-                    if(c.color() == Color.RED){
-                        red += 1;
-                    }
-                    if(c.color() == Color.YELLOW){
-                        yellow += 1;
-                    }
-                    if(c.color() == Color.BLUE){
-                        blue += 1;
-                    }
-                    if(c.color() == Color.GREEN){
-                        green += 1;
-                    }
-                }
-                if (red >= yellow && red >= blue && red >= green){
-                    move = Move.createMove(agent, idx, Color.RED);
-                    return move;
-                }
-                if (yellow >= red && yellow >= blue && yellow >= green){
-                    move = Move.createMove(agent, idx, Color.YELLOW);
-                    return move;
-                }
-                if (blue >= yellow && blue >= red && blue >= green){
-                    move = Move.createMove(agent, idx, Color.BLUE);
-                    return move;
-                }
-                if (green >= yellow && green >= blue && green >= red){
-                    move = Move.createMove(agent, idx, Color.GREEN);
-                    return move;
-                }
+                move = Move.createMove(this, Node.NoLegalMovesIdxDefaults.DrawSingleCardIdxs.PLAY_CARD_MOVE_IDX, getWildColor(h));
             }else{  
                 //Else just play the card
                 move = Move.createMove(agent, idx);
