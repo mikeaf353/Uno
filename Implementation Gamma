@@ -1,0 +1,376 @@
+package src.pas.uno.agents;
+
+
+// SYSTEM IMPORTS
+import edu.bu.pas.uno.Card;
+import edu.bu.pas.uno.Game.GameView;
+import edu.bu.pas.uno.Game;
+import edu.bu.pas.uno.Game.PlayerOrder;
+import edu.bu.pas.uno.Hand.HandView;
+import edu.bu.pas.uno.Hand;
+import edu.bu.pas.uno.agents.MCTSAgent;
+import edu.bu.pas.uno.agents.Agent;
+import edu.bu.pas.uno.enums.Color;
+import edu.bu.pas.uno.enums.Value;
+import edu.bu.pas.uno.moves.Move;
+import edu.bu.pas.uno.tree.Node;
+import edu.bu.pas.uno.tree.Node.NodeState;
+
+import java.util.ArrayList;
+import java.util.Random;
+import java.util.Set;
+import java.util.List;
+
+
+// JAVA PROJECT IMPORTS
+
+
+public class ExpectedOutcomeAgent
+    extends MCTSAgent
+{
+
+    public static class MCTSNode
+        extends Node
+    {
+        public MCTSNode(final GameView game,
+                        final int logicalPlayerIdx,
+                        final Node parent)
+        {
+            super(game, logicalPlayerIdx, parent);
+        }
+
+        @Override
+        public Node getChild(final Move move)
+        {
+            GameView game = this.getGameView();
+            Game new_game = new Game(game);
+
+            if (move != null){
+                new_game.resolveMove(move);
+            }
+            System.out.println("resolve");
+
+            return new MCTSNode(new_game.getView(this.getLogicalPlayerIdx()), this.getLogicalPlayerIdx(), this.getParent());
+        }
+    }
+    public ExpectedOutcomeAgent(final int playerIdx,
+                                final long maxThinkingTimeInMS)
+    {
+        super(playerIdx, maxThinkingTimeInMS);
+    }
+
+    /**
+     * A method to perform the MCTS search on the game tree
+     *
+     * @param   game            The {@link GameView} that should be the root of the game tree
+     * @param   drawnCardIdx    This will be non-null when this method is being called by the 
+     *                          <code>maybePlayDrawnCard</code> method of {@link Agent} and will
+     *                          be <code>null</code> when being called by <code>chooseCardToPlay</code>
+     *                          method of {@link Agent}
+     * @return  The {@link Node} of the root who'se q-values should now be populated and ready to argmax
+     */
+
+
+
+    ///////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    /// 
+    /// 
+    public Color getWildColor() {
+        Color[] colors = {Color.RED, Color.YELLOW, Color.BLUE, Color.GREEN};
+        int idx = getRandom().nextInt(colors.length);
+        return colors[idx];
+    }
+
+    public List<Move> process_unresolved(Node node){
+        List<Move> moves = new ArrayList<>();
+        Move move = Move.createMove(this, Node.NoLegalMovesIdxDefaults.DrawUnresolvedCardsIdxs.MOVE_IDX);
+        moves.add(move);
+        return moves;
+    }
+    public List<Move> process_may_draw(Node node){ 
+        List<Move> moves = new ArrayList<>();
+
+        
+        GameView game = node.getGameView();
+    
+        HandView hand = game.getHandView(getLogicalPlayerIdx());
+
+        Card card = hand.getCard(Node.NoLegalMovesIdxDefaults.DrawSingleCardIdxs.PLAY_CARD_MOVE_IDX);
+        
+        
+        Move move1 = Move.createMove(this, Node.NoLegalMovesIdxDefaults.DrawSingleCardIdxs.KEEP_CARD_MOVE_IDX);
+        moves.add(move1);
+
+        if(card.isWild()){
+            Color color = getWildColor();
+            Move move2 = Move.createMove(this, Node.NoLegalMovesIdxDefaults.DrawSingleCardIdxs.PLAY_CARD_MOVE_IDX, color);
+            moves.add(move2);
+            return moves;
+        }
+        else{
+            Move move2 = Move.createMove(this, Node.NoLegalMovesIdxDefaults.DrawSingleCardIdxs.PLAY_CARD_MOVE_IDX);
+            moves.add(move2);
+            return moves;
+        }
+    }
+    public List<Move> process_legal(Node node){
+        
+        List<Move> moves = new ArrayList<>();
+        List<Integer> legal = node.getOrderedLegalMoves();
+        GameView game = node.getGameView();
+  
+        HandView hand = game.getHandView(getLogicalPlayerIdx());
+
+        for (Integer l : legal){
+            Card card = hand.getCard(l);
+            if(card.isWild()){
+                Color color = getWildColor();
+                Move move2 = Move.createMove(this, l, color);
+                moves.add(move2);
+            }
+            else{
+                //System.out.println("notwild");
+                Move move2 = Move.createMove(this, l);
+                moves.add(move2);
+            }
+        }
+        //System.out.println("After");
+
+        return moves;
+
+    }
+
+    public float rollout(Node n){
+        while(!n.isTerminal()){
+            List<Move> moves = new ArrayList<>();
+            NodeState state = n.getNodeState();
+            if (state.equals(NodeState.NO_LEGAL_MOVES_UNRESOLVED_CARDS_PRESENT)){
+                moves = process_unresolved(n);
+            }
+            else if (state.equals(NodeState.NO_LEGAL_MOVES_MAY_PLAY_DRAWN_CARD)){
+                moves = process_may_draw(n);   
+            }
+            else if(state.equals(NodeState.HAS_LEGAL_MOVES)){
+                moves = process_legal(n);
+            }
+            else{
+                System.out.println("Error in AB DECISION TREE");
+            }
+            int randomidx = getRandom().nextInt(moves.size());
+            n = n.getChild(moves.get(randomidx));
+        }
+        HandView hand = n.getGameView().getHandView(getLogicalPlayerIdx());
+        Hand h = new Hand(hand);
+        List<Card> cards = new ArrayList<>();
+        cards = h.getCards();
+        if(cards.size() == 0){
+            return 1;
+        }
+        else{
+            return 0;
+        }
+    }
+
+    @Override
+    public Node search(final GameView game,
+                       final Integer drawnCardIdx)
+    {
+
+        System.out.println("In search");
+        MCTSNode root = new MCTSNode(game, getLogicalPlayerIdx(), null);
+        // List<Move> moves = new ArrayList<>();
+        // NodeState state = root.getNodeState();
+        //     if (state.equals(NodeState.NO_LEGAL_MOVES_UNRESOLVED_CARDS_PRESENT)){
+        //         System.out.println("Unresolved");
+        //         moves = process_unresolved(root);
+        //     }
+        //     else if (state.equals(NodeState.NO_LEGAL_MOVES_MAY_PLAY_DRAWN_CARD)){
+        //         System.out.println("May Play");
+        //         moves = process_may_draw(root);   
+        //     }
+        //     else if(state.equals(NodeState.HAS_LEGAL_MOVES)){
+        //         System.out.println("Legal");
+        //         moves = process_legal(root);
+        //     }
+        //     else{
+        //         System.out.println("Error in AB DECISION TREE");
+        //     }
+        // System.out.println("Moves to use");
+        // System.out.println(moves);
+        // // int randomidx = this.getRandom().nextInt(moves.size());
+        // // //System.out.println("before roll");
+        // // for(int i = 0; i < 100; i++){
+        // //     Move m = moves.get(randomidx);
+        // //     Node child = root.getChild(m);
+        // //    // System.out.println("in rollout");
+        // //     float win = rollout(child);
+        // //     root.setQValueTotal(randomidx, root.getQValueTotal(randomidx) + win);
+        // //     root.setQCount(randomidx, root.getQCount(randomidx) + 1);
+        // // }
+        // // //System.out.println("after roll");
+        // // //System.out.println("before argmax");
+        // // Move best_move = argmaxQValues(root);
+        // // Node best_child = root.getChild(best_move);
+        // int idx = getRandom().nextInt(moves.size());
+        // Node child = root.getChild(moves.get(idx));
+        return root;
+    }  
+    //////////////////////////////////////////////////////////
+    /**
+     * A method to argmax the Q values inside a {@link Node}
+     *
+     * @param   node            The {@link Node} who has populated q-values
+     * @return  The {@link Move} corresponding to whichever {@link Move} has the largest q-value. Note
+     *          that this can be <code>null</code> if you choose to not play the drawn card (you will
+     *          have to detect whether or not you are in that scenario by examining the @{link Node}'s state).
+     */
+    @Override
+    public Move argmaxQValues(final Node node)
+    {
+        // System.out.println("In argmax");
+        // List<Integer> legal_moves = new ArrayList<>();
+        // legal_moves = node.getOrderedLegalMoves();
+
+        // //Start by check the state of this node
+        // NodeState state = node.getNodeState();
+        // if(state.equals(NodeState.NO_LEGAL_MOVES_UNRESOLVED_CARDS_PRESENT)){
+        //     //one move, just draw cards
+        //     Agent agent = this;
+        //     Move move;
+        //     move = Move.createMove(agent, Node.NoLegalMovesIdxDefaults.DrawUnresolvedCardsIdxs.MOVE_IDX);
+        //     return move;
+        // }
+
+        // else if(state.equals(NodeState.NO_LEGAL_MOVES_MAY_PLAY_DRAWN_CARD)){
+        //     //two moves, 1. Keep the card, 2.a. Use the card, 2.b. Use the card but its wild
+        //     if(node.getQValue(Node.NoLegalMovesIdxDefaults.DrawSingleCardIdxs.KEEP_CARD_MOVE_IDX) < node.getQValue(Node.NoLegalMovesIdxDefaults.DrawSingleCardIdxs.PLAY_CARD_MOVE_IDX)){
+        //         Agent agent = this;
+        //         Move move;
+        //         GameView gameview = node.getGameView();
+        //         HandView hand = gameview.getHandView(getLogicalPlayerIdx());
+        //         Hand h = new Hand(hand);
+        //         Card card = hand.getCard(Node.NoLegalMovesIdxDefaults.DrawSingleCardIdxs.PLAY_CARD_MOVE_IDX);
+        //         boolean iswild = card.isWild();
+        //         if(iswild){
+        //             List<Card> cur_hand = new ArrayList<>();
+        //             cur_hand = h.getCards();
+        //             int red = 0;
+        //             int yellow = 0;
+        //             int blue = 0;
+        //             int green = 0;
+        //             for(Card c : cur_hand){
+        //                 if(c.color() == Color.RED){
+        //                     red += 1;
+        //                 }
+        //                 if(c.color() == Color.YELLOW){
+        //                     yellow += 1;
+        //                 }
+        //                 if(c.color() == Color.BLUE){
+        //                     blue += 1;
+        //                 }
+        //                 if(c.color() == Color.GREEN){
+        //                     green += 1;
+        //                 }
+        //             }
+        //             if (red >= yellow && red >= blue && red >= green){
+        //                 move = Move.createMove(agent, Node.NoLegalMovesIdxDefaults.DrawSingleCardIdxs.PLAY_CARD_MOVE_IDX, Color.RED);
+        //                 return move;
+        //             }
+        //             if (yellow >= red && yellow >= blue && yellow >= green){
+        //                 move = Move.createMove(agent, Node.NoLegalMovesIdxDefaults.DrawSingleCardIdxs.PLAY_CARD_MOVE_IDX, Color.YELLOW);
+        //                 return move;
+        //             }
+        //             if (blue >= yellow && blue >= red && blue >= green){
+        //                 move = Move.createMove(agent, Node.NoLegalMovesIdxDefaults.DrawSingleCardIdxs.PLAY_CARD_MOVE_IDX, Color.BLUE);
+        //                 return move;
+        //             }
+        //             if (green >= yellow && green >= blue && green >= red){
+        //                 move = Move.createMove(agent, Node.NoLegalMovesIdxDefaults.DrawSingleCardIdxs.PLAY_CARD_MOVE_IDX, Color.GREEN);
+        //                 return move;
+        //             }
+        //         }else{  
+        //             move = Move.createMove(agent, Node.NoLegalMovesIdxDefaults.DrawSingleCardIdxs.PLAY_CARD_MOVE_IDX);
+        //             return move;
+        //         }
+        //     }
+        //     else{
+        //         Agent agent = this;
+        //         Move move;
+        //         move = Move.createMove(agent, Node.NoLegalMovesIdxDefaults.DrawSingleCardIdxs.KEEP_CARD_MOVE_IDX);
+        //         return move;
+        //     }
+            
+        // }
+        // else{
+        //     //Possibly many moves
+        //     //Get the best move
+        //     Integer idx = -1;
+        //     for (Integer i : legal_moves){
+        //         if (node.getQValue(i) > idx){
+        //             idx = i;
+        //         }
+        //     }
+        //     Agent agent = this;
+        //     Move move;
+        //     //Check if card is wild
+        //     GameView gameview = node.getGameView();
+        //     HandView hand = gameview.getHandView(getLogicalPlayerIdx());
+        //     Hand h = new Hand(hand);
+        //     Card card = hand.getCard(idx);
+        //     boolean iswild = card.isWild();
+        //     if(iswild){
+        //         //If wild, determine the largest number of colors in your hand and set the wild to that color
+        //         List<Card> cur_hand = new ArrayList<>();
+        //         cur_hand = h.getCards();
+        //         int red = 0;
+        //         int yellow = 0;
+        //         int blue = 0;
+        //         int green = 0;
+        //         for(Card c : cur_hand){
+        //             if(c.color() == Color.RED){
+        //                 red += 1;
+        //             }
+        //             if(c.color() == Color.YELLOW){
+        //                 yellow += 1;
+        //             }
+        //             if(c.color() == Color.BLUE){
+        //                 blue += 1;
+        //             }
+        //             if(c.color() == Color.GREEN){
+        //                 green += 1;
+        //             }
+        //         }
+        //         if (red >= yellow && red >= blue && red >= green){
+        //             move = Move.createMove(agent, idx, Color.RED);
+        //             return move;
+        //         }
+        //         if (yellow >= red && yellow >= blue && yellow >= green){
+        //             move = Move.createMove(agent, idx, Color.YELLOW);
+        //             return move;
+        //         }
+        //         if (blue >= yellow && blue >= red && blue >= green){
+        //             move = Move.createMove(agent, idx, Color.BLUE);
+        //             return move;
+        //         }
+        //         if (green >= yellow && green >= blue && green >= red){
+        //             move = Move.createMove(agent, idx, Color.GREEN);
+        //             return move;
+        //         }
+        //     }else{  
+        //         //Else just play the card
+        //         move = Move.createMove(agent, idx);
+        //         return move;
+        //     }
+
+        // }
+        // System.err.println("Something wrong in argmax values");
+
+        List<Integer> moves = new ArrayList<>();
+        moves = node.getOrderedLegalMoves();
+        int randomidx = this.getRandom().nextInt(moves.size());
+        Move move = Move.createMove(this, randomidx);
+
+
+        return move;
+    }
+}
