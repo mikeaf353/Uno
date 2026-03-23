@@ -21,6 +21,7 @@ import java.util.ArrayList;
 import java.util.Random;
 import java.util.Set;
 import java.util.List;
+import java.util.Stack;
 
 
 // JAVA PROJECT IMPORTS
@@ -39,67 +40,28 @@ public class ExpectedOutcomeAgent
         {
             super(game, logicalPlayerIdx, parent);
         }
-        
+
         @Override
         public Node getChild(final Move move)
         {
             GameView gameView = this.getGameView();
             //Creating rando agents, and adding them to make a new game instance
+            //System.out.println(gameView.getNumPlayers());
             Agent[] agentList = new Agent[gameView.getNumPlayers()];
             for(int i = 0; i < gameView.getNumPlayers(); i++) {
                 int agentIdx = gameView.getPlayerOrder().getAgentIdx(i);
                 //Set thinking time to 5000 for now. Might need to change
-                RandomAgent a = new RandomAgent(agentIdx, 5000);
+                Agent a = new RandomAgent(agentIdx, 5000);
                 a.setLogicalPlayerIdx(i);
                 agentList[i] = a;
             }
             Game game = new Game(gameView, agentList);
-            int curLogicalIdx = game.getPlayerOrder().getCurrentLogicalPlayerIdx();
-            Agent curAgent = game.getAgent(curLogicalIdx);
-            NodeState curState = getNodeState();
-            Move newMove = null;
-            if(curState.equals(NodeState.NO_LEGAL_MOVES_UNRESOLVED_CARDS_PRESENT)) {
-                //Pick up stacked on cards
-                game.drawTotal(game.getHand(curLogicalIdx), game.getUnresolvedCards().total());
-                game.getUnresolvedCards().clear();
-            } else if(curState.equals(NodeState.NO_LEGAL_MOVES_MAY_PLAY_DRAWN_CARD)) {
-                //Handle may play drawn card
-                int drawnCardIdx = game.getHand(curLogicalIdx).size() - 1;
-                // Isnt wild
-                if(move.getNewColorIfWild() == null) {
-                    newMove = Move.createMove(curAgent, drawnCardIdx);
-                } else {
-                    // Just set the color as nonCur Color for now, had issues using random and wanted to get this done.
-                    ArrayList<Color> colors = new ArrayList<>();
-                    colors.add(Color.RED);
-                    colors.add(Color.YELLOW);
-                    colors.add(Color.GREEN);
-                    colors.add(Color.BLUE);
-                    Color curColor = gameView.getCurrentColor();
-                    colors.remove(curColor);
-                    newMove = Move.createMove(curAgent, drawnCardIdx, colors.get(0));
-                }
-                game.resolveMove(newMove);
-            } else {
-                // Handle legal moves
-                if(move.getNewColorIfWild() == null) {
-                    // Isnt wild
-                    newMove = Move.createMove(curAgent, move.getCardToPlayIdx());
-                } else { 
-                    // Is. Set to nonCur rn like the wild selector above.
-                    ArrayList<Color> colors = new ArrayList<>();
-                    colors.add(Color.RED);
-                    colors.add(Color.YELLOW);
-                    colors.add(Color.GREEN);
-                    colors.add(Color.BLUE);
-                    Color curColor = gameView.getCurrentColor();
-                    colors.remove(curColor);
-                    newMove = Move.createMove(curAgent, move.getCardToPlayIdx(), colors.get(0));
-                }
-                game.resolveMove(newMove);
+
+            if(move != null){
+                game.resolveMove(move);
             }
-            GameView newView = new GameView(game, game.getCurrentAgent().getPlayerIdx());
-            return new MCTSNode(newView, curLogicalIdx, this);
+
+            return new MCTSNode(game.getView(this.getLogicalPlayerIdx()), this.getLogicalPlayerIdx(), this.getParent());
         }
     }
     public ExpectedOutcomeAgent(final int playerIdx,
@@ -126,6 +88,7 @@ public class ExpectedOutcomeAgent
     /// 
     public Color getWildColor(Color curColor) {
         ArrayList<Color> colors = new ArrayList<>();
+        //System.out.println("Cur color: " + curColor);
         colors.add(Color.RED);
         colors.add(Color.YELLOW);
         colors.add(Color.GREEN);
@@ -133,6 +96,7 @@ public class ExpectedOutcomeAgent
         colors.remove(curColor);
         
         int idx = getRandom().nextInt(colors.size());
+        //System.out.println("Color chosen" + colors.get(idx));
         return colors.get(idx);
     }
 
@@ -150,8 +114,7 @@ public class ExpectedOutcomeAgent
         Move move1 = Move.createMove(agent, Node.NoLegalMovesIdxDefaults.DrawSingleCardIdxs.KEEP_CARD_MOVE_IDX);
         moves.add(move1);
         if(card.isWild()){
-            Color curColor = game.getCurrentColor();
-            Color color = getWildColor(curColor);
+            Color color = getWildColor(game.getCurrentColor());
             Move move2 = Move.createMove(agent, Node.NoLegalMovesIdxDefaults.DrawSingleCardIdxs.PLAY_CARD_MOVE_IDX, color);
             moves.add(move2);
             return moves;
@@ -162,7 +125,6 @@ public class ExpectedOutcomeAgent
             return moves;
         }
     }
-
     public List<Move> process_legal(Node node, Agent agent){
         //System.out.println("In legal");
         List<Move> moves = new ArrayList<>();
@@ -175,8 +137,7 @@ public class ExpectedOutcomeAgent
             Card card = hand.getCard(legal.get(i));
             //System.out.println(card);
             if(card.isWild()){
-                Color curColor = game.getCurrentColor();
-                Color color = getWildColor(curColor);
+                Color color = getWildColor(game.getCurrentColor());
                 Move move2 = Move.createMove(agent, legal.get(i), color);
                 moves.add(move2);
             }
@@ -189,35 +150,46 @@ public class ExpectedOutcomeAgent
         //Moves is returning properly for legal
     }
 
-
-
-    //Pretty much does nothing at the moment.
     public long rollout(Node n){
-        GameView gameView = n.getGameView();
+        PlayerOrder order = n.getGameView().getPlayerOrder();
+        int num = n.getGameView().getNumPlayers();
+        List<Integer> opp_agents = new ArrayList<>();
+        for(int i = 0; i < num; i++){
+            opp_agents.add(i);
+        }
+        //System.out.println(opp_agents);
+        List<Agent> opps = new ArrayList<>();
 
-        // Must be a list, not arraylist if we want to make a game from it.
-        Agent[] agentList = new Agent[gameView.getNumPlayers()];
-            for(int i = 0; i < gameView.getNumPlayers(); i++) {
-                int agentIdx = gameView.getPlayerOrder().getAgentIdx(i);
-                //Set thinking time to 5000 for now. Might need to change
-                RandomAgent a = new RandomAgent(agentIdx, 5000);
-                a.setLogicalPlayerIdx(i);
-                agentList[i] = a;
-            }
-        
-        
-        // while(!gameView.isOver()){
+        for (int i : opp_agents){
+            int agent_idx = order.getAgentIdx(i);
+            RandomAgent rand = new RandomAgent(agent_idx, getMaxThinkingTimeInMS());
+            rand.setLogicalPlayerIdx(i);
+            opps.add(rand);
+        }
+        System.out.println("Before While");
+
+        while(!n.isTerminal()){
             
-        // }
+            PlayerOrder o = n.getGameView().getPlayerOrder();
+            System.out.println();
+            for(Agent a  : opps){
+                if(a.getPlayerIdx() == o.getCurrentAgentIdx()){
+                    Move move = a.chooseCardToPlay(n.getGameView());
+                    n = n.getChild(move);
+                }
+            }
+        }
 
-        HandView hand = gameView.getHandView(getLogicalPlayerIdx());
+
+        HandView hand = n.getGameView().getHandView(getLogicalPlayerIdx());
         Hand h = new Hand(hand);
         List<Card> cards = new ArrayList<>();
         cards = h.getCards();
-        if(cards.size() == 0) {
+        if(cards.size() == 0){
             System.out.println("roll success");
             return 1;
-        } else {
+        }
+        else{
             System.out.println("roll fail");
             return 0;
         }
@@ -227,37 +199,35 @@ public class ExpectedOutcomeAgent
     public Node search(final GameView game,
                        final Integer drawnCardIdx)
     {
-
-        System.out.println("In search");
+        System.out.println(game.getCurrentColor());
+        //System.out.println("In search");
         MCTSNode root = new MCTSNode(game, getLogicalPlayerIdx(), null);
+        Random random = getRandom();
         NodeState state = root.getNodeState();
         List<Move> moves = new ArrayList<>();
+        System.out.println(state == Node.NodeState.NO_LEGAL_MOVES_MAY_PLAY_DRAWN_CARD);
         if(state.equals(Node.NodeState.NO_LEGAL_MOVES_UNRESOLVED_CARDS_PRESENT)){
+            //System.out.println("Unresolved!!!");
             return root;
         }
         else if(state.equals(Node.NodeState.NO_LEGAL_MOVES_MAY_PLAY_DRAWN_CARD)){
+            //System.out.println("ONE MOVE!!!");
             moves = process_may_draw(root, this);
         }
         else{
+           // System.out.println("LEGAL!!!");
             moves = process_legal(root, this);
         }
-
-        System.out.println("SEARCH, Moves: " + moves);
         int idx = 0;
         for(Move m : moves){
             Node c = root.getChild(m);
             for(int i = 0; i < 1; i++){
+                // long win = random.nextInt(2);
                 long win = rollout(c);
-                System.out.println("Out of roll");
                 root.setQValueTotal(idx, root.getQValueTotal(idx) + win);
                 root.setQCount(idx, root.getQCount(idx) + 1);
-
-
-                System.out.println(root.getQValueTotal(idx));
-                System.out.println(root.getQCount(idx));
             }
             idx++;
-            System.out.println("child: " + c);
         }
 
         return root;
@@ -276,18 +246,25 @@ public class ExpectedOutcomeAgent
     {
         List<Integer> moves = new ArrayList<>();
         moves = node.getOrderedLegalMoves();
-        System.out.println(moves);
-        int randomidx = moves.get(0);
-        HandView hand = node.getGameView().getHandView(getLogicalPlayerIdx());
-        Color curColor = node.getGameView().getCurrentColor();
-        Card card = hand.getCard(randomidx);
+        GameView game = node.getGameView();
+        HandView hand = game.getHandView(this.getLogicalPlayerIdx());
+        
+        //System.out.println(moves);
+        int randomidx = this.getRandom().nextInt(moves.size());
+        int cardidx = moves.get(randomidx);
+        Card card = hand.getCard(cardidx);
+        System.out.println(card);
         Move move = null;
-        if(card.isWild()) {
-            move = Move.createMove(this, randomidx, getWildColor(curColor));
-        } else {
-            move = Move.createMove(this, randomidx);
+
+        if(card.isWild()){
+            System.out.println("TRIGGERED :)");
+            move = Move.createMove(this, cardidx, getWildColor(game.getCurrentColor()));
+        } 
+        else{
+          move = Move.createMove(this, cardidx);
         }
-        System.out.println("arg");
+        
+        //System.out.println("arg");
         return move;
     }
 }
