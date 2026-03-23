@@ -152,41 +152,25 @@ public class ExpectedOutcomeAgent
     public long rollout(Node n){
         PlayerOrder order = n.getGameView().getPlayerOrder();
         int num = n.getGameView().getNumPlayers();
-        List<Integer> opp_agents = new ArrayList<>();
+        Agent[] agents = new Agent[num];
+
         for(int i = 0; i < num; i++){
-            opp_agents.add(i);
-        }
-        //System.out.println(opp_agents);
-        List<Agent> opps = new ArrayList<>();
-
-
-        for (int i : opp_agents){
-            int agent_idx = order.getAgentIdx(i);
-            RandomAgent rand = new RandomAgent(agent_idx, getMaxThinkingTimeInMS());
+            int agentIdx = order.getAgentIdx(i);
+            RandomAgent rand = new RandomAgent(agentIdx, getMaxThinkingTimeInMS());
             rand.setLogicalPlayerIdx(i);
-            opps.add(rand);
+            agents[i] = rand;
         }
+
+        Game game = new Game(n.getGameView(), agents);
         System.out.println("Before While");
 
-        while(!n.isTerminal()){
-            PlayerOrder o = n.getGameView().getPlayerOrder();
-            if(o.getCurrentLogicalPlayerIdx() == getLogicalPlayerIdx()){
-                Agent myguy = opps.get(getLogicalPlayerIdx());
-                Move move = myguy.chooseCardToPlay(n.getGameView());
-                n = n.getChild(move);
-            }
-            else{
-                for(Agent op : opps){
-                    if(o.getCurrentLogicalPlayerIdx() == op.getLogicalPlayerIdx()){
-                        Move move = op.chooseCardToPlay(n.getGameView());
-                        n = n.getChild(move);
-                    }
-                }
-            }
+        while(!game.isOver()){
+            Move move = game.getMove();
+            System.out.println("RUNNING SIMULATION. ROOT: " + n);
+            game.resolveMove(move);
         }
 
-
-        HandView hand = n.getGameView().getHandView(getLogicalPlayerIdx());
+        HandView hand = game.getView(getLogicalPlayerIdx()).getHandView(getLogicalPlayerIdx());
         Hand h = new Hand(hand);
         List<Card> cards = new ArrayList<>();
         cards = h.getCards();
@@ -199,6 +183,8 @@ public class ExpectedOutcomeAgent
             return 0;
         }
     }
+    
+
 
     @Override
     public Node search(final GameView game,
@@ -230,6 +216,7 @@ public class ExpectedOutcomeAgent
                 // long win = random.nextInt(2);
                 long win = rollout(c);
                 root.setQValueTotal(idx, root.getQValueTotal(idx) + win);
+                System.out.println(root.getQValueTotal(idx));
                 root.setQCount(idx, root.getQCount(idx) + 1);
             }
             idx++;
@@ -249,27 +236,33 @@ public class ExpectedOutcomeAgent
     @Override
     public Move argmaxQValues(final Node node)
     {
-        List<Integer> moves = new ArrayList<>();
-        moves = node.getOrderedLegalMoves();
-        GameView game = node.getGameView();
-        HandView hand = game.getHandView(this.getLogicalPlayerIdx());
-        
-        //System.out.println(moves);
-        int randomidx = this.getRandom().nextInt(moves.size());
-        int cardidx = moves.get(randomidx);
-        Card card = hand.getCard(cardidx);
-        System.out.println(card);
-        Move move = null;
+        NodeState state = node.getNodeState();
+        List<Move> moves = new ArrayList<>();
 
-        if(card.isWild()){
-            System.out.println("TRIGGERED :)");
-            move = Move.createMove(this, cardidx, getWildColor(game.getCurrentColor()));
-        } 
-        else{
-          move = Move.createMove(this, cardidx);
+        if(state.equals(Node.NodeState.NO_LEGAL_MOVES_UNRESOLVED_CARDS_PRESENT)){
+            return process_unresolved(node, this).get(0);
         }
-        
-        //System.out.println("arg");
-        return move;
+        else if(state.equals(Node.NodeState.NO_LEGAL_MOVES_MAY_PLAY_DRAWN_CARD)){
+            moves = process_may_draw(node, this);
+        }
+        else{
+            moves = process_legal(node, this);
+        }
+
+        int bestIdx = 0;
+        double bestScore = -1.0;
+
+        for(int i = 0; i < moves.size(); i++) {
+            long qCount = node.getQCount(i);
+            double score = 0.0;
+            if(qCount > 0) {
+                score = ((double) node.getQValueTotal(i)) / qCount;
+            }
+            if(score > bestScore) {
+                bestScore = score;
+                bestIdx = i;
+            }
+        }
+        return moves.get(bestIdx);
     }
 }
