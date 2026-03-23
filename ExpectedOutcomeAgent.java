@@ -9,6 +9,7 @@ import edu.bu.pas.uno.Game.PlayerOrder;
 import edu.bu.pas.uno.Hand.HandView;
 import edu.bu.pas.uno.Hand;
 import edu.bu.pas.uno.agents.MCTSAgent;
+import edu.bu.pas.uno.agents.RandomAgent;
 import edu.bu.pas.uno.agents.Agent;
 import edu.bu.pas.uno.enums.Color;
 import edu.bu.pas.uno.enums.Value;
@@ -16,11 +17,11 @@ import edu.bu.pas.uno.moves.Move;
 import edu.bu.pas.uno.tree.Node;
 import edu.bu.pas.uno.tree.Node.NodeState;
 
-
 import java.util.ArrayList;
 import java.util.Random;
 import java.util.Set;
 import java.util.List;
+import java.util.Stack;
 
 
 // JAVA PROJECT IMPORTS
@@ -43,14 +44,23 @@ public class ExpectedOutcomeAgent
         @Override
         public Node getChild(final Move move)
         {
-            GameView game = this.getGameView();
-            Game new_game = new Game(game);
+            GameView gameView = this.getGameView();
+            //Creating rando agents, and adding them to make a new game instance
+            Agent[] agentList = new Agent[gameView.getNumPlayers()];
+            for(int i = 0; i < gameView.getNumPlayers(); i++) {
+                int agentIdx = gameView.getPlayerOrder().getAgentIdx(i);
+                //Set thinking time to 5000 for now. Might need to change
+                Agent a = new RandomAgent(agentIdx, 5000);
+                a.setLogicalPlayerIdx(i);
+                agentList[i] = a;
+            }
+            Game game = new Game(gameView, agentList);
 
-            if (move != null){
-                new_game.resolveMove(move);
+            if(move != null){
+                game.resolveMove(move);
             }
 
-            return new MCTSNode(new_game.getView(this.getLogicalPlayerIdx()), this.getLogicalPlayerIdx(), this.getParent());
+            return new MCTSNode(game.getView(this.getLogicalPlayerIdx()), this.getLogicalPlayerIdx(), this.getParent());
         }
     }
     public ExpectedOutcomeAgent(final int playerIdx,
@@ -58,7 +68,7 @@ public class ExpectedOutcomeAgent
     {
         super(playerIdx, maxThinkingTimeInMS);
     }
-
+    
     /**
      * A method to perform the MCTS search on the game tree
      *
@@ -74,249 +84,127 @@ public class ExpectedOutcomeAgent
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////
     /// 
-    // public double GetUtility(Node node, GameView game){ //Get the utility of the current child
-    //     double pr_a_given_s = Math.pow((node.getQValue(getLogicalPlayerIdx()) / node.getQValueTotal(getLogicalPlayerIdx())), 2);
-    //     double fin = pr_a_given_s * node.getQValue(getLogicalPlayerIdx());
-
-    //     return fin;
-    // }
-
-
-    public Color getWildColor(Hand h) {
-        List<Card> cur_hand = new ArrayList<>();
-        cur_hand = h.getCards();
-        int red = 0;
-        int yellow = 0;
-        int blue = 0;
-        int green = 0;
-        for(Card c : cur_hand){
-            if(c.color() == Color.RED){
-                red += 1;
-            }
-            if(c.color() == Color.YELLOW){
-                yellow += 1;
-            }
-            if(c.color() == Color.BLUE){
-                blue += 1;
-            }
-            if(c.color() == Color.GREEN){
-                green += 1;
-            }
-        }
-
-        if (red >= yellow && red >= blue && red >= green){
-            return Color.RED;
-        }
-        else if (yellow >= red && yellow >= blue && yellow >= green){
-            return Color.YELLOW;
-        }
-        else if (blue >= yellow && blue >= red && blue >= green){
-            return Color.BLUE;
-        }
-        else {
-            return Color.GREEN;
-        }
+    /// 
+    public Color getWildColor(Color curColor) {
+        ArrayList<Color> colors = new ArrayList<>();
+        colors.add(Color.RED);
+        colors.add(Color.YELLOW);
+        colors.add(Color.GREEN);
+        colors.add(Color.BLUE);
+        colors.remove(curColor);
+        
+        int idx = getRandom().nextInt(colors.size());
+        return colors.get(idx);
     }
 
-    public Boolean explore(Node node){
-        System.out.println("in Explore");
+    public List<Move> process_unresolved(Node node, Agent agent){
+        List<Move> moves = new ArrayList<>();
+        Move move = Move.createMove(agent, Node.NoLegalMovesIdxDefaults.DrawUnresolvedCardsIdxs.MOVE_IDX);
+        moves.add(move);
+        return moves;
+    }
+    public List<Move> process_may_draw(Node node, Agent agent){ 
+        List<Move> moves = new ArrayList<>();
         GameView game = node.getGameView();
-
-        if(game.isOver()){
-            HandView hand = game.getHandView(getLogicalPlayerIdx());
-            System.out.println("Explore, game over");
-            if(hand.size() == 0){
-                return true;
-            }
-            else{
-                return false;
-            }
+        HandView hand = game.getHandView(getLogicalPlayerIdx());
+        Card card = hand.getCard(Node.NoLegalMovesIdxDefaults.DrawSingleCardIdxs.PLAY_CARD_MOVE_IDX);
+        Move move1 = Move.createMove(agent, Node.NoLegalMovesIdxDefaults.DrawSingleCardIdxs.KEEP_CARD_MOVE_IDX);
+        moves.add(move1);
+        if(card.isWild()){
+            Color color = getWildColor(game.getCurrentColor());
+            Move move2 = Move.createMove(agent, Node.NoLegalMovesIdxDefaults.DrawSingleCardIdxs.PLAY_CARD_MOVE_IDX, color);
+            moves.add(move2);
+            return moves;
         }
-
         else{
-            System.out.println("Explore: Game not over");
-            NodeState state = node.getNodeState();
-            Random random = new Random();
+            Move move2 = Move.createMove(agent, Node.NoLegalMovesIdxDefaults.DrawSingleCardIdxs.PLAY_CARD_MOVE_IDX);
+            moves.add(move2);
+            return moves;
+        }
+    }
+    public List<Move> process_legal(Node node, Agent agent){
+        List<Move> moves = new ArrayList<>();
+        List<Integer> legal = node.getOrderedLegalMoves();
+        GameView game = node.getGameView();
+        HandView hand = game.getHandView(agent.getLogicalPlayerIdx());
 
-            if(state.equals(NodeState.NO_LEGAL_MOVES_UNRESOLVED_CARDS_PRESENT)){
-                System.out.println("Explore: Unresolved cards");
-                //one move, just draw cards
-                Agent agent = this;
-                Move move;
-                move = Move.createMove(agent, Node.NoLegalMovesIdxDefaults.DrawUnresolvedCardsIdxs.MOVE_IDX);
-                Node child = node.getChild(move);
-                if (explore(child)){
-                    return true;
-                }
-                else{
-                    return false;
-                }
+
+        for (int i = 0; i < legal.size(); i++){
+            Card card = hand.getCard(legal.get(i));
+            if(card.isWild()){
+                Color color = getWildColor(game.getCurrentColor());
+                Move move2 = Move.createMove(agent, legal.get(i), color);
+                moves.add(move2);
             }
-            else if(state.equals(NodeState.NO_LEGAL_MOVES_MAY_PLAY_DRAWN_CARD)){
-                System.out.println("Explore: may play drawn card");
-                Boolean coin_flip = random.nextBoolean();
-                Agent agent = this;
-                Move move = null;
-                if(coin_flip){
-                   move = Move.createMove(agent, Node.NoLegalMovesIdxDefaults.DrawSingleCardIdxs.KEEP_CARD_MOVE_IDX); 
-                }
-                else{
-                    HandView hand = game.getHandView(getLogicalPlayerIdx());
-                    Hand h = new Hand(hand);
-                    Card card = hand.getCard(Node.NoLegalMovesIdxDefaults.DrawSingleCardIdxs.PLAY_CARD_MOVE_IDX);
-                    boolean iswild = card.isWild();
-
-
-                if(iswild){
-                    System.out.println("Explore: legalmoves, iswild");
-                    List<Card> cur_hand = new ArrayList<>();
-                    cur_hand = h.getCards();
-                    
-                    move = Move.createMove(this, Node.NoLegalMovesIdxDefaults.DrawSingleCardIdxs.PLAY_CARD_MOVE_IDX, getWildColor(h));
-
-                    Node child = node.getChild(move);
-                    if (explore(child)){
-                        return true;
-                    }
-                    else{
-                        return false;
-                    }
-                }else{
-                    System.out.println("Explore: Legal moves, not wild");
-                    move = Move.createMove(this, Node.NoLegalMovesIdxDefaults.DrawSingleCardIdxs.PLAY_CARD_MOVE_IDX);
-                    Node child = node.getChild(move);
-                    if (explore(child)){
-                        return true;
-                    }
-                    else{
-                        return false;
-                    }
-                }
-                }
-                
-            }
-
-            //There are legal moves
             else{
-                System.out.println("Explore: Legal Moves");
-
-                List<Integer> legal = new ArrayList<>();
-                legal = node.getOrderedLegalMoves();
-                int randomindex = random.nextInt(legal.size());
-
-                HandView hand = game.getHandView(getLogicalPlayerIdx());
-                Hand h = new Hand(hand);
-                Card card = hand.getCard(Node.NoLegalMovesIdxDefaults.DrawSingleCardIdxs.PLAY_CARD_MOVE_IDX);
-                boolean iswild = card.isWild();
-
-                if(iswild){
-                    System.out.println("Explore: legalmoves, iswild");
-                    List<Card> cur_hand = new ArrayList<>();
-                    cur_hand = h.getCards();
-                    Move move = Move.createMove(this, Node.NoLegalMovesIdxDefaults.DrawSingleCardIdxs.PLAY_CARD_MOVE_IDX, getWildColor(h));
-                    Node child = node.getChild(move);
-                    if (explore(child)){
-                        return true;
-                    }
-                    else{
-                        return false;
-                    }
-                }else{
-                    System.out.println("Explore: Legal moves, not wild");
-                    Move move = Move.createMove(this, randomindex);
-                    Node child = node.getChild(move);
-                    if (explore(child)){
-                        return true;
-                    }
-                    else{
-                        return false;
-                    }
-                }
+                Move move2 = Move.createMove(agent, legal.get(i));
+                moves.add(move2);
             }
         }
-        return null;
+        return moves;
+        //Moves is returning properly for legal
     }
+
+    public long rollout(Node n){
+        PlayerOrder order = n.getGameView().getPlayerOrder();
+        int num = n.getGameView().getNumPlayers();
+        Agent[] agents = new Agent[num];
+
+        for(int i = 0; i < num; i++){
+            int agentIdx = order.getAgentIdx(i);
+            RandomAgent rand = new RandomAgent(agentIdx, getMaxThinkingTimeInMS());
+            rand.setLogicalPlayerIdx(i);
+            agents[i] = rand;
+        }
+
+        Game game = new Game(n.getGameView(), agents);
+
+        while(!game.isOver()) {
+            Move move = game.getMove();
+            game.resolveMove(move);
+        }
+
+        HandView hand = game.getView(getLogicalPlayerIdx()).getHandView(getLogicalPlayerIdx());
+        Hand h = new Hand(hand);
+        List<Card> cards = new ArrayList<>();
+        cards = h.getCards();
+        if(cards.size() == 0) {
+            return 1;
+        } else return 0;
+    }
+    
+
 
     @Override
     public Node search(final GameView game,
                        final Integer drawnCardIdx)
     {
-        System.out.println("in search");
-        MCTSNode node = new MCTSNode(game, getLogicalPlayerIdx(), null);
-        long start = System.currentTimeMillis();
-
-
-        while(System.currentTimeMillis() - start < 5000){
-        Random random = new Random();
-        NodeState state = node.getNodeState();
-        Move move = null; //Initialize move
-        int random_idx;
-        if(state.equals(NodeState.NO_LEGAL_MOVES_UNRESOLVED_CARDS_PRESENT)){
-            move = Move.createMove(this, Node.NoLegalMovesIdxDefaults.DrawUnresolvedCardsIdxs.MOVE_IDX);
-            random_idx = Node.NoLegalMovesIdxDefaults.DrawUnresolvedCardsIdxs.MOVE_IDX;
+        MCTSNode root = new MCTSNode(game, getLogicalPlayerIdx(), null);
+        Random random = getRandom();
+        NodeState state = root.getNodeState();
+        List<Move> moves = new ArrayList<>();
+        if(state.equals(Node.NodeState.NO_LEGAL_MOVES_UNRESOLVED_CARDS_PRESENT)){
+            return root;
         }
-        else if(state.equals(NodeState.NO_LEGAL_MOVES_MAY_PLAY_DRAWN_CARD)){
-            Boolean coin = random.nextBoolean();
-            if(coin){
-                
-                
-                HandView hand = game.getHandView(getLogicalPlayerIdx());
-                Hand h = new Hand(hand);
-                Card card = hand.getCard(Node.NoLegalMovesIdxDefaults.DrawSingleCardIdxs.PLAY_CARD_MOVE_IDX);
-                boolean iswild = card.isWild();
-
-                if(iswild){
-                    List<Card> cur_hand = new ArrayList<>();
-                    cur_hand = h.getCards();
-                    move = Move.createMove(this, Node.NoLegalMovesIdxDefaults.DrawSingleCardIdxs.PLAY_CARD_MOVE_IDX, getWildColor(h));
-                }
-                else{
-                    move = Move.createMove(this, Node.NoLegalMovesIdxDefaults.DrawSingleCardIdxs.PLAY_CARD_MOVE_IDX);
-                }
-                random_idx = Node.NoLegalMovesIdxDefaults.DrawSingleCardIdxs.PLAY_CARD_MOVE_IDX;
-            }
-            else{
-                move = Move.createMove(this, Node.NoLegalMovesIdxDefaults.DrawSingleCardIdxs.KEEP_CARD_MOVE_IDX);
-                random_idx = Node.NoLegalMovesIdxDefaults.DrawSingleCardIdxs.KEEP_CARD_MOVE_IDX;
-            }
+        else if(state.equals(Node.NodeState.NO_LEGAL_MOVES_MAY_PLAY_DRAWN_CARD)){
+            moves = process_may_draw(root, this);
         }
         else{
-            List<Integer> legal = node.getOrderedLegalMoves();
-            int randomidx = random.nextInt(legal.size());
-            random_idx = randomidx;
-
-            HandView hand = game.getHandView(getLogicalPlayerIdx());
-            Hand h = new Hand(hand);
-            Card card = hand.getCard(randomidx);
-            boolean iswild = card.isWild();
-
-            if(iswild){
-                List<Card> cur_hand = new ArrayList<>();
-                cur_hand = h.getCards();
-                move = Move.createMove(this, Node.NoLegalMovesIdxDefaults.DrawSingleCardIdxs.PLAY_CARD_MOVE_IDX, getWildColor(h));
+            moves = process_legal(root, this);
+        }
+        int idx = 0;
+        for(Move m : moves){
+            Node c = root.getChild(m);
+            for(int i = 0; i < 50; i++){
+                long win = rollout(c);
+                root.setQValueTotal(idx, root.getQValueTotal(idx) + win);
+                root.setQCount(idx, root.getQCount(idx) + 1);
             }
-            else{
-                move = Move.createMove(this, randomidx);
-            }
+            idx++;
+        }
 
-        }
-        //After Checking the state make the random child and explore it
-        Node child = node.getChild(move);
-        if(explore(child)){
-            node.setQValueTotal(random_idx, node.getQValueTotal(random_idx) + 1);
-            node.setQCount(random_idx, node.getQCount(random_idx) + 1);
-        }
-        else{
-            node.setQCount(random_idx, node.getQCount(random_idx) + 1);
-        }
-        System.out.println(node.getQCount(random_idx) + "--------------------------------");
-        System.out.println(node.getQValueTotal(random_idx) + "--------------------------------");
-        }
-        System.out.println("Done search");
-        return node;
-    }
-
-
+        return root;
+    }  
     //////////////////////////////////////////////////////////
     /**
      * A method to argmax the Q values inside a {@link Node}
@@ -329,77 +217,32 @@ public class ExpectedOutcomeAgent
     @Override
     public Move argmaxQValues(final Node node)
     {
-        System.out.println("In argmax");
-        List<Integer> legal_moves = new ArrayList<>();
-        legal_moves = node.getOrderedLegalMoves();
-
-        //Start by check the state of this node
         NodeState state = node.getNodeState();
-        if(state.equals(NodeState.NO_LEGAL_MOVES_UNRESOLVED_CARDS_PRESENT)){
-            //one move, just draw cards
-            Agent agent = this;
-            Move move;
-            move = Move.createMove(agent, Node.NoLegalMovesIdxDefaults.DrawUnresolvedCardsIdxs.MOVE_IDX);
-            return move;
+        List<Move> moves = new ArrayList<>();
+
+        //Setting the moves based on nodeState
+        if(state.equals(Node.NodeState.NO_LEGAL_MOVES_UNRESOLVED_CARDS_PRESENT)) {
+            moves = process_unresolved(node, this);
+        } else if(state.equals(Node.NodeState.NO_LEGAL_MOVES_MAY_PLAY_DRAWN_CARD)) {
+            moves = process_may_draw(node, this);
+        } else {
+            moves = process_legal(node, this);
         }
 
-        else if(state.equals(NodeState.NO_LEGAL_MOVES_MAY_PLAY_DRAWN_CARD)){
-            //two moves, 1. Keep the card, 2.a. Use the card, 2.b. Use the card but its wild
-            if(node.getQValue(Node.NoLegalMovesIdxDefaults.DrawSingleCardIdxs.KEEP_CARD_MOVE_IDX) < node.getQValue(Node.NoLegalMovesIdxDefaults.DrawSingleCardIdxs.PLAY_CARD_MOVE_IDX)){
-                Agent agent = this;
-                Move move;
-                GameView gameview = node.getGameView();
-                HandView hand = gameview.getHandView(getLogicalPlayerIdx());
-                Hand h = new Hand(hand);
-                Card card = hand.getCard(Node.NoLegalMovesIdxDefaults.DrawSingleCardIdxs.PLAY_CARD_MOVE_IDX);
-                boolean iswild = card.isWild();
-                if(iswild){
-                    List<Card> cur_hand = new ArrayList<>();
-                    cur_hand = h.getCards();
-                    move = Move.createMove(this, Node.NoLegalMovesIdxDefaults.DrawSingleCardIdxs.PLAY_CARD_MOVE_IDX, getWildColor(h));
-                }else{  
-                    move = Move.createMove(agent, Node.NoLegalMovesIdxDefaults.DrawSingleCardIdxs.PLAY_CARD_MOVE_IDX);
-                    return move;
-                }
+        //Basic score maxxer that finds the idx of the best move to play
+        int bestIdx = 0;
+        double bestScore = -1.0;
+        for(int i = 0; i < moves.size(); i++) {
+            long qCount = node.getQCount(i);
+            double score = 0.0;
+            if(qCount > 0) {
+                score = ((double) node.getQValueTotal(i)) / qCount;
             }
-            else{
-                Agent agent = this;
-                Move move;
-                move = Move.createMove(agent, Node.NoLegalMovesIdxDefaults.DrawSingleCardIdxs.KEEP_CARD_MOVE_IDX);
-                return move;
+            if(score > bestScore) {
+                bestScore = score;
+                bestIdx = i;
             }
-            
         }
-        else{
-            //Possibly many moves
-            //Get the best move
-            Integer idx = -1;
-            for (Integer i : legal_moves){
-                if (node.getQValue(i) > idx){
-                    idx = i;
-                }
-            }
-            Agent agent = this;
-            Move move;
-            //Check if card is wild
-            GameView gameview = node.getGameView();
-            HandView hand = gameview.getHandView(getLogicalPlayerIdx());
-            Hand h = new Hand(hand);
-            Card card = hand.getCard(idx);
-            boolean iswild = card.isWild();
-            if(iswild){
-                //If wild, determine the largest number of colors in your hand and set the wild to that color
-                List<Card> cur_hand = new ArrayList<>();
-                cur_hand = h.getCards();
-                move = Move.createMove(this, Node.NoLegalMovesIdxDefaults.DrawSingleCardIdxs.PLAY_CARD_MOVE_IDX, getWildColor(h));
-            }else{  
-                //Else just play the card
-                move = Move.createMove(agent, idx);
-                return move;
-            }
-
-        }
-        System.err.println("Something wrong in argmax values");
-        return null;
+        return moves.get(bestIdx);
     }
 }
