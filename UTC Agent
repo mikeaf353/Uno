@@ -17,6 +17,7 @@ import edu.bu.pas.uno.history.HistoryItem;
 import edu.bu.pas.uno.moves.Move;
 import edu.bu.pas.uno.tree.Node;
 import edu.bu.pas.uno.tree.Node.NodeState;
+import edu.bu.pas.uno.Deck;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -47,18 +48,23 @@ public class UCTAgent
         @Override
         public Node getChild(final Move move)
         {
-
             GameView gameView = this.getGameView();
             //Creating rando agents, and adding them to make a new game instance
+            Hand[] hands = new Hand[gameView.getNumPlayers()];
             Agent[] agentList = new Agent[gameView.getNumPlayers()];
             for(int i = 0; i < gameView.getNumPlayers(); i++) {
                 int agentIdx = gameView.getPlayerOrder().getAgentIdx(i);
                 //Set thinking time to 5000 for now. Might need to change
                 Agent a = new RandomAgent(agentIdx, 5000);
                 a.setLogicalPlayerIdx(i);
+                HandView hv = gameView.getHandView(i);
+                Hand h = new Hand(hv);
+                hands[i] = h;
+
                 agentList[i] = a;
             }
-            Game game = new Game(gameView, agentList);
+            Deck drawPile = new Deck(true);
+            Game game = new Game(drawPile, hands, gameView, agentList);
             if(move != null){
                 game.resolveMove(move);
             }
@@ -108,17 +114,16 @@ public class UCTAgent
         List<Move> moves = new ArrayList<>();
         GameView game = node.getGameView();
         HandView hand = game.getHandView(agent.getLogicalPlayerIdx());
-        int drawnCardIdx = hand.size() - 1;
-        Card card = hand.getCard(drawnCardIdx);
+        Card card = hand.getCard(Node.NoLegalMovesIdxDefaults.DrawSingleCardIdxs.PLAY_CARD_MOVE_IDX);
         moves.add(null);
         if(card.isWild()){
             Color color = getWildColor(game.getCurrentColor());
-            Move move2 = Move.createMove(agent, drawnCardIdx, color);
+            Move move2 = Move.createMove(agent, Node.NoLegalMovesIdxDefaults.DrawSingleCardIdxs.PLAY_CARD_MOVE_IDX, color);
             moves.add(move2);
             return moves;
         }
         else{
-            Move move2 = Move.createMove(agent, drawnCardIdx);
+            Move move2 = Move.createMove(agent, Node.NoLegalMovesIdxDefaults.DrawSingleCardIdxs.PLAY_CARD_MOVE_IDX);
             moves.add(move2);
             return moves;
         }
@@ -151,17 +156,22 @@ public class UCTAgent
 
     public long rollout(Node n){
         PlayerOrder order = n.getGameView().getPlayerOrder();
-        int num = n.getGameView().getNumPlayers();
-        Agent[] agents = new Agent[num];
+        GameView gameView = n.getGameView();
+        Hand[] hands = new Hand[gameView.getNumPlayers()];
+        Agent[] agentList = new Agent[gameView.getNumPlayers()];
+        for(int i = 0; i < gameView.getNumPlayers(); i++) {
+            int agentIdx = gameView.getPlayerOrder().getAgentIdx(i);
+            //Set thinking time to 5000 for now. Might need to change
+            Agent a = new RandomAgent(agentIdx, 5000);
+            a.setLogicalPlayerIdx(i);
+            HandView hv = gameView.getHandView(i);
+            Hand h = new Hand(hv);
+            hands[i] = h;
 
-        for(int i = 0; i < num; i++){
-            int agentIdx = order.getAgentIdx(i);
-            RandomAgent rand = new RandomAgent(agentIdx, getMaxThinkingTimeInMS());
-            rand.setLogicalPlayerIdx(i);
-            agents[i] = rand;
+            agentList[i] = a;
         }
-
-        Game game = new Game(n.getGameView(), agents);
+        Deck drawPile = new Deck(true);
+        Game game = new Game(drawPile, hands, gameView, agentList);
 
         while(!game.isOver()){
             Move move = game.getMove();
@@ -192,15 +202,12 @@ public class UCTAgent
         List<Move> moves = new ArrayList<>();
         if(state.equals(Node.NodeState.NO_LEGAL_MOVES_UNRESOLVED_CARDS_PRESENT)){
             moves = process_unresolved(node, agent);
-            //System.out.println("UNRESOLVED: " + moves);
         }
         else if(state.equals(Node.NodeState.NO_LEGAL_MOVES_MAY_PLAY_DRAWN_CARD)){
             moves = process_may_draw(node, agent);
-            //System.out.println("PROCESS: " + moves);
         }
         else{
             moves = process_legal(node, agent);
-            //System.out.println("ELSE");
         }
 
         return moves;
