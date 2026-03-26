@@ -1,0 +1,373 @@
+package src.pas.uno.agents;
+
+
+// SYSTEM IMPORTS
+import edu.bu.pas.uno.Card;
+import edu.bu.pas.uno.Game;
+import edu.bu.pas.uno.Game.GameView;
+import edu.bu.pas.uno.Game.PlayerOrder;
+import edu.bu.pas.uno.Hand;
+import edu.bu.pas.uno.Hand.HandView;
+import edu.bu.pas.uno.agents.Agent;
+import edu.bu.pas.uno.agents.MCTSAgent;
+import edu.bu.pas.uno.agents.RandomAgent;
+import edu.bu.pas.uno.enums.Color;
+import edu.bu.pas.uno.enums.Value;
+import edu.bu.pas.uno.history.HistoryItem;
+import edu.bu.pas.uno.moves.Move;
+import edu.bu.pas.uno.tree.Node;
+import edu.bu.pas.uno.tree.Node.NodeState;
+
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Random;
+import java.util.Set;
+import java.util.Map;
+
+
+// JAVA PROJECT IMPORTS
+
+
+public class UCTAgent
+    extends MCTSAgent
+{
+
+    public static class MCTSNode
+        extends Node
+    {
+        public MCTSNode(final GameView game,
+                        final int logicalPlayerIdx,
+                        final Node parent)
+        {
+            super(game, logicalPlayerIdx, parent);
+        }
+
+        @Override
+        public Node getChild(final Move move)
+        {
+
+            GameView gameView = this.getGameView();
+            //Creating rando agents, and adding them to make a new game instance
+            Agent[] agentList = new Agent[gameView.getNumPlayers()];
+            for(int i = 0; i < gameView.getNumPlayers(); i++) {
+                int agentIdx = gameView.getPlayerOrder().getAgentIdx(i);
+                //Set thinking time to 5000 for now. Might need to change
+                Agent a = new RandomAgent(agentIdx, 4800);
+                a.setLogicalPlayerIdx(i);
+                agentList[i] = a;
+            }
+            Game game = new Game(gameView, agentList);
+            if(move != null){
+                game.resolveMove(move);
+            }
+            int curplayeridx = game.getCurrentAgent().getPlayerIdx();
+            int curlogicalplayeridx = game.getCurrentAgent().getLogicalPlayerIdx();
+
+            return new MCTSNode(game.getView(curplayeridx), curlogicalplayeridx, this);
+
+        }
+    }
+
+    public UCTAgent(final int playerIdx,
+                    final long maxThinkingTimeInMS)
+    {
+        super(playerIdx, maxThinkingTimeInMS);
+    }
+
+    /**
+     * A method to perform the MCTS search on the game tree
+     *
+     * @param   game            The {@link GameView} that should be the root of the game tree
+     * @param   drawnCardIdx    This will be non-null when this method is being called by the 
+     *                          <code>maybePlayDrawnCard</code> method of {@link Agent} and will
+     *                          be <code>null</code> when being called by <code>chooseCardToPlay</code>
+     *                          method of {@link Agent}
+     * @return  The {@link Node} of the root who'se q-values should now be populated and ready to argmax
+     */
+
+    public Color getWildColor(Color curColor) {
+        ArrayList<Color> colors = new ArrayList<>();
+        colors.add(Color.RED);
+        colors.add(Color.YELLOW);
+        colors.add(Color.GREEN);
+        colors.add(Color.BLUE);
+        colors.remove(curColor);
+        
+        int idx = getRandom().nextInt(colors.size());
+        return colors.get(idx);
+    }
+
+    public List<Move> process_unresolved(Node node, Agent agent){
+        List<Move> moves = new ArrayList<>();
+        Move move = Move.createMove(agent, Node.NoLegalMovesIdxDefaults.DrawUnresolvedCardsIdxs.MOVE_IDX);
+        moves.add(move);
+        return moves;
+    }
+    public List<Move> process_may_draw(Node node, Agent agent){ 
+        List<Move> moves = new ArrayList<>();
+        GameView game = node.getGameView();
+        HandView hand = game.getHandView(agent.getLogicalPlayerIdx());
+        Card card = hand.getCard(Node.NoLegalMovesIdxDefaults.DrawSingleCardIdxs.PLAY_CARD_MOVE_IDX);
+        Move move1 = Move.createMove(agent, Node.NoLegalMovesIdxDefaults.DrawSingleCardIdxs.KEEP_CARD_MOVE_IDX);
+        moves.add(move1);
+        if(card.isWild()){
+            Color color = getWildColor(game.getCurrentColor());
+            Move move2 = Move.createMove(agent, Node.NoLegalMovesIdxDefaults.DrawSingleCardIdxs.PLAY_CARD_MOVE_IDX, color);
+            moves.add(move2);
+            return moves;
+        }
+        else{
+            Move move2 = Move.createMove(agent, Node.NoLegalMovesIdxDefaults.DrawSingleCardIdxs.PLAY_CARD_MOVE_IDX);
+            moves.add(move2);
+            return moves;
+        }
+    }
+    public List<Move> process_legal(Node node, Agent agent){
+        List<Move> moves = new ArrayList<>();
+        List<Integer> legal = node.getOrderedLegalMoves();
+        
+        GameView game = node.getGameView();
+        HandView hand = game.getHandView(agent.getLogicalPlayerIdx());
+        //System.out.println("game logical"+game.getPlayerOrder().getCurrentLogicalPlayerIdx());
+        //System.out.println("agent logical"+agent.getLogicalPlayerIdx());
+
+
+
+        for (int i = 0; i < legal.size(); i++){
+            Card card = hand.getCard(legal.get(i));
+            if(card.isWild()){
+                Color color = getWildColor(game.getCurrentColor());
+                Move move2 = Move.createMove(agent, legal.get(i), color);
+                moves.add(move2);
+            }
+            else{
+                Move move2 = Move.createMove(agent, legal.get(i));
+                moves.add(move2);
+            }
+        }
+        return moves;
+        //Moves is returning properly for legal
+    }
+
+
+    public long rollout(Node n){
+        PlayerOrder order = n.getGameView().getPlayerOrder();
+        int num = n.getGameView().getNumPlayers();
+        Agent[] agents = new Agent[num];
+
+        for(int i = 0; i < num; i++){
+            int agentIdx = order.getAgentIdx(i);
+            RandomAgent rand = new RandomAgent(agentIdx, getMaxThinkingTimeInMS());
+            rand.setLogicalPlayerIdx(i);
+            agents[i] = rand;
+        }
+
+        Game game = new Game(n.getGameView(), agents);
+
+        while(!game.isOver()){
+            Move move = game.getMove();
+            game.resolveMove(move);
+        }
+
+        HandView hand = game.getView(getLogicalPlayerIdx()).getHandView(getLogicalPlayerIdx());
+        Hand h = new Hand(hand);
+        List<Card> cards = new ArrayList<>();
+        cards = h.getCards();
+        if(cards.size() == 0){
+            return 1;
+        }
+        else{
+            return 0;
+        }
+    }
+
+    public List<Move> getmoves(Node node){
+        NodeState state = node.getNodeState();
+        PlayerOrder order = node.getGameView().getPlayerOrder();
+        int cur_agent_idx = order.getCurrentAgentIdx();
+        int cur_agent_log_idx = order.getCurrentLogicalPlayerIdx();
+        RandomAgent agent = new RandomAgent(cur_agent_idx, 5000);
+        agent.setLogicalPlayerIdx(cur_agent_log_idx);
+
+        
+        List<Move> moves = new ArrayList<>();
+        if(state.equals(Node.NodeState.NO_LEGAL_MOVES_UNRESOLVED_CARDS_PRESENT)){
+            moves = process_unresolved(node, agent);
+        }
+        else if(state.equals(Node.NodeState.NO_LEGAL_MOVES_MAY_PLAY_DRAWN_CARD)){
+            moves = process_may_draw(node, agent);
+        }
+        else{
+            moves = process_legal(node, agent);
+        }
+
+        return moves;
+    }
+
+    public boolean isexpanded(Node node){
+        List<Move> moves = getmoves(node);
+        int idx = 0;
+        for(Move m: moves){
+            if(node.getQCount(idx) == 0){
+                return false;
+            }
+            idx++;
+        }
+        return true;
+    }
+
+    public Node bestUCTchild(Node node){
+        Node best_child = null;
+        double best_UCT = Double.NEGATIVE_INFINITY;
+        
+        List<Move> moves = getmoves(node);
+        double Ns = 0;
+        int idx = 0;
+        for(Move m  : moves){
+            double count = node.getQCount(idx);
+            Ns += count;
+            idx++;
+        }
+
+        int idx2 = 0;
+        for(Move m : moves){
+            double exploit = node.getQValueTotal(idx2)/node.getQCount(idx2);
+            double explore = 2 * Math.sqrt(Math.log(Ns)/node.getQCount(idx2));
+            double UCT = exploit + explore;
+            if(UCT > best_UCT){
+                best_UCT = UCT;
+                best_child = node.getChild(m);
+            }
+            idx2++;
+        }
+        return best_child;
+    }
+    public Node selection(Node node){
+        Node current = node;
+        while(!current.isTerminal() && isexpanded(current)){
+            current = bestUCTchild(current);
+        }
+        return current;
+    }
+
+
+    public Node expand(Node node){
+        List<Move> moves = getmoves(node);
+        Node child  = null;
+
+        int idx = 0; 
+        for(Move m: moves){
+            if(node.getQCount(idx) == 0){
+                child = node.getChild(m);
+                break;
+            }
+            idx++;
+        }
+
+        return child;
+    }
+
+
+
+    public void Backprop(Node node, long win){
+        Node current = node;
+
+        while(current.getParent() != null){
+            Node parent = current.getParent();
+            Card lastplayed = current.getGameView().getLastPlayedCard();
+            HandView hand = parent.getGameView().getHandView(parent.getLogicalPlayerIdx());
+            Hand h = new Hand(hand);
+            System.out.println("Parents hand"+ h.getCards());
+            System.out.println("Parent legal moves: " + parent.getOrderedLegalMoves());
+            int idx = 0;
+            for(Integer l : parent.getOrderedLegalMoves()){
+                Card chosen = h.getCard(l);
+                if(chosen.equals(lastplayed)){
+                    break;
+                }
+                idx++;
+            }
+            parent.setQCount(idx, parent.getQCount(idx) + 1);
+            parent.setQValueTotal(idx, parent.getQValueTotal(idx) + win);
+
+            System.out.println("Last played card! " + lastplayed);
+            current = parent;
+
+        }
+    }
+
+
+
+
+    @Override
+    public Node search(final GameView game,
+                       final Integer drawnCardIdx)
+    {
+        try {
+        MCTSNode root = new MCTSNode(game, getLogicalPlayerIdx(), null);
+        HandView hand = root.getGameView().getHandView(getLogicalPlayerIdx());
+        Hand h = new Hand(hand);
+        System.out.println(h.getCards());
+
+        for(int i = 0; i < 3; i++){
+            Node node = selection(root);
+            if(!node.isTerminal()){
+                node = expand(node);  
+            }
+
+
+            long win = rollout(node);
+            Backprop(node, win);
+        }
+        return root;
+        } catch (Exception e) {
+            e.printStackTrace();
+            return null;
+        }
+
+
+    }
+
+    /**
+     * A method to argmax the Q values inside a {@link Node}
+     *
+     * @param   node            The {@link Node} who has populated q-values
+     * @return  The {@link Move} corresponding to whichever {@link Move} has the largest q-value. Note
+     *          that this can be <code>null</code> if you choose to not play the drawn card (you will
+     *          have to detect whether or not you are in that scenario by examining the @{link Node}'s state).
+     */
+    @Override
+    public Move argmaxQValues(final Node node)
+    {
+        NodeState state = node.getNodeState();
+        List<Move> moves = new ArrayList<>();
+
+        if(state.equals(Node.NodeState.NO_LEGAL_MOVES_UNRESOLVED_CARDS_PRESENT)){
+            return process_unresolved(node, this).get(0);
+        }
+        else if(state.equals(Node.NodeState.NO_LEGAL_MOVES_MAY_PLAY_DRAWN_CARD)){
+            moves = process_may_draw(node, this);
+        }
+        else{
+            moves = process_legal(node, this);
+        }
+
+        int bestIdx = 0;
+        double bestScore = -1.0;
+
+        for(int i = 0; i < moves.size(); i++) {
+            long qCount = node.getQCount(i);
+            double score = 0.0;
+            if(qCount > 0) {
+                score = ((double) node.getQValueTotal(i)) / qCount;
+            }
+            if(score > bestScore) {
+                bestScore = score;
+                bestIdx = i;
+            }
+        }
+        return moves.get(bestIdx);
+    }
+}
