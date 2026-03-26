@@ -54,7 +54,7 @@ public class UCTAgent
             for(int i = 0; i < gameView.getNumPlayers(); i++) {
                 int agentIdx = gameView.getPlayerOrder().getAgentIdx(i);
                 //Set thinking time to 5000 for now. Might need to change
-                Agent a = new RandomAgent(agentIdx, 4800);
+                Agent a = new RandomAgent(agentIdx, 5000);
                 a.setLogicalPlayerIdx(i);
                 agentList[i] = a;
             }
@@ -101,25 +101,24 @@ public class UCTAgent
 
     public List<Move> process_unresolved(Node node, Agent agent){
         List<Move> moves = new ArrayList<>();
-        Move move = Move.createMove(agent, Node.NoLegalMovesIdxDefaults.DrawUnresolvedCardsIdxs.MOVE_IDX);
-        moves.add(move);
+        moves.add(null);
         return moves;
     }
     public List<Move> process_may_draw(Node node, Agent agent){ 
         List<Move> moves = new ArrayList<>();
         GameView game = node.getGameView();
         HandView hand = game.getHandView(agent.getLogicalPlayerIdx());
-        Card card = hand.getCard(Node.NoLegalMovesIdxDefaults.DrawSingleCardIdxs.PLAY_CARD_MOVE_IDX);
-        Move move1 = Move.createMove(agent, Node.NoLegalMovesIdxDefaults.DrawSingleCardIdxs.KEEP_CARD_MOVE_IDX);
-        moves.add(move1);
+        int drawnCardIdx = hand.size() - 1;
+        Card card = hand.getCard(drawnCardIdx);
+        moves.add(null);
         if(card.isWild()){
             Color color = getWildColor(game.getCurrentColor());
-            Move move2 = Move.createMove(agent, Node.NoLegalMovesIdxDefaults.DrawSingleCardIdxs.PLAY_CARD_MOVE_IDX, color);
+            Move move2 = Move.createMove(agent, drawnCardIdx, color);
             moves.add(move2);
             return moves;
         }
         else{
-            Move move2 = Move.createMove(agent, Node.NoLegalMovesIdxDefaults.DrawSingleCardIdxs.PLAY_CARD_MOVE_IDX);
+            Move move2 = Move.createMove(agent, drawnCardIdx);
             moves.add(move2);
             return moves;
         }
@@ -130,8 +129,6 @@ public class UCTAgent
         
         GameView game = node.getGameView();
         HandView hand = game.getHandView(agent.getLogicalPlayerIdx());
-        //System.out.println("game logical"+game.getPlayerOrder().getCurrentLogicalPlayerIdx());
-        //System.out.println("agent logical"+agent.getLogicalPlayerIdx());
 
 
 
@@ -195,12 +192,15 @@ public class UCTAgent
         List<Move> moves = new ArrayList<>();
         if(state.equals(Node.NodeState.NO_LEGAL_MOVES_UNRESOLVED_CARDS_PRESENT)){
             moves = process_unresolved(node, agent);
+            //System.out.println("UNRESOLVED: " + moves);
         }
         else if(state.equals(Node.NodeState.NO_LEGAL_MOVES_MAY_PLAY_DRAWN_CARD)){
             moves = process_may_draw(node, agent);
+            //System.out.println("PROCESS: " + moves);
         }
         else{
             moves = process_legal(node, agent);
+            //System.out.println("ELSE");
         }
 
         return moves;
@@ -279,8 +279,6 @@ public class UCTAgent
             Card lastplayed = current.getGameView().getLastPlayedCard();
             HandView hand = parent.getGameView().getHandView(parent.getLogicalPlayerIdx());
             Hand h = new Hand(hand);
-            System.out.println("Parents hand"+ h.getCards());
-            System.out.println("Parent legal moves: " + parent.getOrderedLegalMoves());
             int idx = 0;
             for(Integer l : parent.getOrderedLegalMoves()){
                 Card chosen = h.getCard(l);
@@ -292,7 +290,6 @@ public class UCTAgent
             parent.setQCount(idx, parent.getQCount(idx) + 1);
             parent.setQValueTotal(idx, parent.getQValueTotal(idx) + win);
 
-            System.out.println("Last played card! " + lastplayed);
             current = parent;
 
         }
@@ -305,13 +302,11 @@ public class UCTAgent
     public Node search(final GameView game,
                        final Integer drawnCardIdx)
     {
-        try {
         MCTSNode root = new MCTSNode(game, getLogicalPlayerIdx(), null);
         HandView hand = root.getGameView().getHandView(getLogicalPlayerIdx());
         Hand h = new Hand(hand);
-        System.out.println(h.getCards());
 
-        for(int i = 0; i < 3; i++){
+        for(int i = 0; i < 1000; i++){
             Node node = selection(root);
             if(!node.isTerminal()){
                 node = expand(node);  
@@ -322,12 +317,6 @@ public class UCTAgent
             Backprop(node, win);
         }
         return root;
-        } catch (Exception e) {
-            e.printStackTrace();
-            return null;
-        }
-
-
     }
 
     /**
@@ -345,7 +334,7 @@ public class UCTAgent
         List<Move> moves = new ArrayList<>();
 
         if(state.equals(Node.NodeState.NO_LEGAL_MOVES_UNRESOLVED_CARDS_PRESENT)){
-            return process_unresolved(node, this).get(0);
+            moves = process_unresolved(node, this);
         }
         else if(state.equals(Node.NodeState.NO_LEGAL_MOVES_MAY_PLAY_DRAWN_CARD)){
             moves = process_may_draw(node, this);
