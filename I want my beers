@@ -92,10 +92,6 @@ public class UnoMCTSAgent
 
             Game new_game = new Game(deck, all_hands, gameView, agentList);
 
-
-
-
-
             if(move != null){
                 new_game.resolveMove(move);
             }
@@ -277,68 +273,65 @@ public class UnoMCTSAgent
                        final Integer drawnCardIdx)
     {
         MCTSNode node = new MCTSNode(game, getLogicalPlayerIdx(), null);
-        HandView hand = node.getGameView().getHandView(getLogicalPlayerIdx());
-        Hand h = new Hand(hand);
-        List<Card> mycards = h.getCards();
+        for(int z = 0; z < 20; z++) {
+            HandView hand = node.getGameView().getHandView(getLogicalPlayerIdx());
+            Hand h = new Hand(hand);
+            List<Card> mycards = h.getCards();
 
-        GameView gameView = node.getGameView();
-        Agent[] agentList = new Agent[gameView.getNumPlayers()];
-        for(int i = 0; i < gameView.getNumPlayers(); i++) {
-            int agentIdx = gameView.getPlayerOrder().getAgentIdx(i);
-            Agent a = new RandomAgent(agentIdx, 4800);
-            a.setLogicalPlayerIdx(i);
-            agentList[i] = a;
-        }
-        Stack<Card> discardpile = node.getGameView().getDiscardPile().pile();
-        Deck deck = new Deck(true);
-
-        List<Card> cards = new ArrayList<>();
-        for(Card c: deck){
-            cards.add(c);
-        }
-        for(Card c : cards) {
-            if (discardpile.contains(c) || mycards.contains(c)) {
-                deck.remove(c);
+            GameView gameView = node.getGameView();
+            Agent[] agentList = new Agent[gameView.getNumPlayers()];
+            for(int i = 0; i < gameView.getNumPlayers(); i++) {
+                int agentIdx = gameView.getPlayerOrder().getAgentIdx(i);
+                Agent a = new RandomAgent(agentIdx, 4800);
+                a.setLogicalPlayerIdx(i);
+                agentList[i] = a;
             }
-        }
-        Hand[] all_hands = new Hand[node.getGameView().getNumPlayers()];
-        all_hands[this.getLogicalPlayerIdx()] = h;
-        for(int i = 0; i < node.getGameView().getNumPlayers(); i++){
-            if(i == this.getLogicalPlayerIdx()){
-                continue;
+            Stack<Card> discardpile = node.getGameView().getDiscardPile().pile();
+            Deck deck = new Deck(true);
+
+            List<Card> cards = new ArrayList<>();
+            for(Card c: deck){
+                cards.add(c);
             }
-            int hand_size = gameView.getHandView(i).size();
-            List<Card> cur_hand = new ArrayList<>();
-            for(int j = 0; j < hand_size;j++){
-                int random = this.getRandom().nextInt(deck.size());
-                cur_hand.add(deck.get(random));
-                deck.remove(random);
-            }
-            HandView uh = new HandView(cur_hand);
-            Hand nuh = new Hand(uh);
-            all_hands[i] = nuh;
-        }
-        
-        Game new_game = new Game(deck, all_hands, gameView, agentList);
-        //THIS IS GOOD
-
-
-
-
-
-        
-        GameView NewGameView = new_game.getView(this.getPlayerIdx());
-        MCTSNode node2 = new MCTSNode(NewGameView, getLogicalPlayerIdx(), null);
-        List<Move> moves = getmoves(node2);
-        int idx = 0;
-        for(Move m : moves){
-                Node c = node2.getChild(m);
-                for(int i = 0; i < 200; i++){
-                    long win = rollout(c);
-                    node.setQCount(idx, node.getQCount(idx) + 1);
-                    node.setQValueTotal(idx, node.getQValueTotal(idx) + win);
+            for(Card c : cards) {
+                if (discardpile.contains(c) || mycards.contains(c)) {
+                    deck.remove(c);
                 }
-            idx++;
+            }
+            Hand[] all_hands = new Hand[node.getGameView().getNumPlayers()];
+            all_hands[this.getLogicalPlayerIdx()] = h;
+            for(int i = 0; i < node.getGameView().getNumPlayers(); i++){
+                if(i == this.getLogicalPlayerIdx()){
+                    continue;
+                }
+                int hand_size = gameView.getHandView(i).size();
+                List<Card> cur_hand = new ArrayList<>();
+                for(int j = 0; j < hand_size;j++){
+                    int random = this.getRandom().nextInt(deck.size());
+                    cur_hand.add(deck.get(random));
+                    deck.remove(random);
+                }
+                HandView uh = new HandView(cur_hand);
+                Hand nuh = new Hand(uh);
+                all_hands[i] = nuh;
+            }
+            
+            Game new_game = new Game(deck, all_hands, gameView, agentList);
+
+            
+            GameView NewGameView = new_game.getView(this.getPlayerIdx());
+            MCTSNode node2 = new MCTSNode(NewGameView, getLogicalPlayerIdx(), null);
+            List<Move> moves = getmoves(node2);
+            int idx = 0;
+            for(Move m : moves){
+                    Node c = node2.getChild(m);
+                    for(int i = 0; i < 200; i++){
+                        long win = rollout(c);
+                        node.setQCount(idx, node.getQCount(idx) + 1);
+                        node.setQValueTotal(idx, node.getQValueTotal(idx) + win);
+                    }
+                idx++;
+            }
         }
        
 
@@ -387,6 +380,4 @@ public class UnoMCTSAgent
         return moves.get(bestIdx);
     }
 
-
-    
 }
